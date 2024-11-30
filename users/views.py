@@ -97,8 +97,8 @@ class VerificationCodeView(GenericAPIView):
             if user:
                 # Проверяем, совпадает ли введённый верификационный код с сохранённым у пользователя
                 if user.verification_code == verification_code:
-                    # Если коды совпадают, генерируем инвайт-код и активируем пользователя
-                    user.generate_invite_code()
+                    if not user.invite_code:
+                        user.generate_invite_code()
                     user.is_active = True
                     user.save()
 
