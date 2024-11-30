@@ -3,6 +3,7 @@ from rest_framework import permissions
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 from users import views
+from users.views import UserProfileView, ActivateInviteCodeView
 
 schema_view = get_schema_view(
     openapi.Info(
@@ -19,9 +20,9 @@ schema_view = get_schema_view(
 urlpatterns = [
     path('phone/', views.PhoneNumberView.as_view(), name='phone_number'),
     path('verify/', views.VerificationCodeView.as_view(), name='verify_code'),
-    path('profile/', views.UserProfileView.as_view(), name='user_profile'),
-    path('activate_invite_code/', views.ActivateInviteCodeView.as_view(),
-         name='activate_invite_code'),
+    path('profile/<str:username>/', views.UserProfileView.as_view(), name='user-profile'),
+    path('profile/<str:username>/activate-invite-code/', views.ActivateInviteCodeView.as_view(),
+         name='activate-invite-code'),
     path('api-auth/', include('rest_framework.urls')),
     # Swagger UI
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0),

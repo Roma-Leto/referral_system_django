@@ -21,10 +21,21 @@ class VerificationCodeSerializer(serializers.Serializer):
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
+    # Список пользователей, активировавших инвайт-код этого пользователя
+    invited_users = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ['phone_number', 'invite_code', 'activated_invite_code']
+        fields = ['phone_number', 'invite_code', 'activated_invite_code',
+                  'invited_users']
+
+    def get_invited_users(self, obj):
+        # Возвращает список пользователей, которые активировали инвайт-код этого пользователя
+        invited_users = User.objects.filter(activated_invite_code=obj.invite_code)
+        return [user.phone_number for user in invited_users]
 
 
 class InviteCodeSerializer(serializers.Serializer):
-    invite_code = serializers.CharField(max_length=6)
+    phone_number = serializers.CharField(max_length=15)
+    activated_invite_code = serializers.CharField(max_length=6)
+

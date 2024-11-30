@@ -2,10 +2,11 @@ import random
 import time
 
 from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 from rest_framework import status
 from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
-from django.contrib.auth import get_user_model
+from rest_framework.permissions import IsAuthenticated
 
 from .models import User
 from .serializers import PhoneNumberVerificationSerializer, VerificationCodeSerializer, \
@@ -122,93 +123,63 @@ class VerificationCodeView(GenericAPIView):
 
 
 class UserProfileView(GenericAPIView):
-    """
-    Эндпоинт для получения или обновления профиля пользователя.
-    Пользователь может просматривать свой профиль и активировать инвайт-код.
-    """
-    serializer_class = UserProfileSerializer  # Сериализатор для работы с профилем пользователя.
+    # permission_classes = [IsAuthenticated]
+    serializer_class = UserProfileSerializer
 
-    @swagger_auto_schema(operation_summary="Возврат данных текущего пользователя")
     def get(self, request, *args, **kwargs):
         """
-        Обрабатывает GET-запрос, возвращает данные профиля текущего пользователя.
+        Получить профиль пользователя по имени пользователя (username).
         """
-        user = request.user  # Получаем текущего авторизованного пользователя.
-        return Response(self.get_serializer(user).data, status=status.HTTP_200_OK)
+        username = kwargs.get('username')  # Извлекаем username из URL-параметра
 
-    @swagger_auto_schema(operation_summary="Проверка и активация invite-кода")
-    def put(self, request, *args, **kwargs):
-        """
-        Обрабатывает PUT-запрос, обновляет профиль пользователя, активирует инвайт-код.
-        """
-        serializer = self.get_serializer(
-            data=request.data)  # Создаем сериализатор с данными из запроса.
+        try:
+            user = User.objects.get(username=username)  # Находим пользователя по username
+        except User.DoesNotExist:
+            return Response({"message": "Пользователь не найден"}, status=status.HTTP_404_NOT_FOUND)
 
-        if serializer.is_valid():  # Проверяем валидность данных.
-            invite_code = serializer.validated_data[
-                'invite_code']  # Извлекаем инвайт-код.
-            user = request.user  # Получаем текущего пользователя.
-
-            try:
-                inviter = User.objects.get(
-                    invite_code=invite_code)  # Ищем пользователя по инвайт-коду.
-            except User.DoesNotExist:
-                return Response({"error": "Неверный инвайт-код."},
-                                status=status.HTTP_400_BAD_REQUEST)
-
-            if inviter == user:
-                return Response(
-                    {"error": "Вы не можете активировать свой собственный инвайт-код."},
-                    status=status.HTTP_400_BAD_REQUEST)
-
-            if user.activated_invite_code:
-                return Response({"error": "Вы уже активировали инвайт-код."},
-                                status=status.HTTP_400_BAD_REQUEST)
-
-            user.activated_invite_code = invite_code  # Активируем инвайт-код для пользователя.
-            user.save()
-            return Response({"message": "Инвайт-код активирован!"},
-                            status=status.HTTP_200_OK)
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        # Сериализуем данные пользователя
+        serializer = self.get_serializer(user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class ActivateInviteCodeView(GenericAPIView):
-    """
-    Эндпоинт для активации инвайт-кода другим пользователем.
-    Пользователь может активировать инвайт-код, предоставленный другим пользователем.
-    """
-    serializer_class = InviteCodeSerializer  # Сериализатор для работы с инвайт-кодами.
+    # Убираем или не указываем permission_classes
+    serializer_class = InviteCodeSerializer
 
-    @swagger_auto_schema(operation_summary="Активация invite-кода")
+    @swagger_auto_schema(operation_summary="Активация инвайт-кода для пользователя.",
+                         request_body=InviteCodeSerializer)
     def post(self, request, *args, **kwargs):
-        """
-        Обрабатывает POST-запрос, проверяет и активирует инвайт-код для текущего пользователя.
-        """
-        serializer = self.get_serializer(
-            data=request.data)  # Создаем сериализатор с данными из запроса.
+        """Активация инвайт-кода для пользователя."""
 
-        if serializer.is_valid():  # Проверяем валидность данных.
-            invite_code = serializer.validated_data[
-                'invite_code']  # Извлекаем инвайт-код.
-            user = request.user  # Получаем текущего пользователя.
+        # Получаем инвайт-код из запроса
+        invite_code = request.data.get('invite_code')
 
-            try:
-                inviter = User.objects.get(
-                    invite_code=invite_code)  # Ищем пользователя по инвайт-коду.
-            except User.DoesNotExist:
-                return Response({"error": "Неверный инвайт-код."},
+        # Проверка на существование инвайт-кода
+        if not invite_code:
+            return Response({"message": "Инвайт-код не может быть пустым."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Проверяем, существует ли пользователь с этим инвайт-кодом
+            inviter = User.objects.get(invite_code=invite_code)
+        except User.DoesNotExist:
+            return Response({"message": "Неверный инвайт-код."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Если пользователь найден, но не авторизован, то создаем нового пользователя
+        user = request.user if request.user.is_authenticated else None
+
+        if user:
+            # Если пользователь авторизован, активируем инвайт-код для него
+            if user.activated_invite_code:
+                return Response({"message": "Вы уже активировали инвайт-код."},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-            # Если инвайт-код уже активирован, возвращаем ошибку.
-            if inviter.activated_invite_code:
-                return Response({"error": "Вы уже активировали инвайт-код."},
-                                status=status.HTTP_400_BAD_REQUEST)
+            user.activate_invite_code(invite_code)
+            return Response(
+                {"message": f"Инвайт-код {invite_code} успешно активирован!"},
+                status=status.HTTP_200_OK)
 
-            inviter.activated_invite_code = invite_code  # Активируем инвайт-код для пользователя.
-            inviter.save()
-
-            return Response({"message": "Инвайт-код активирован!"},
-                            status=status.HTTP_200_OK)
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response({
+                            "message": "Пользователь не авторизован. Но вы можете создать нового пользователя."},
+                        status=status.HTTP_200_OK)
