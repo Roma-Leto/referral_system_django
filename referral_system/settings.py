@@ -32,6 +32,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'users.apps.UsersConfig',
+    'rest_framework',
+    'drf_yasg',
 ]
 
 MIDDLEWARE = [
@@ -72,6 +74,8 @@ DATABASES = {
     }
 }
 
+# Новая модель пользователя
+AUTH_USER_MODEL = 'users.User'
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
