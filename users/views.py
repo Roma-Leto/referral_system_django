@@ -2,11 +2,9 @@ import random
 import time
 
 from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
 from rest_framework import status
 from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
 
 from .models import User
 from .serializers import PhoneNumberVerificationSerializer, VerificationCodeSerializer, \
@@ -34,7 +32,6 @@ class PhoneNumberView(GenericAPIView):
             # Проверка на существование пользователя с данным номером телефона.
             user = User.objects.filter(
                 phone_number=phone_number).first()  # Используем номер телефона как username
-            print("XXXXXXXXXXXXX", user)
             if user:
                 if user.is_active:
                     # Если пользователь уже верифицирован (is_active=1), возвращаем сообщение и перенаправляем на профиль.
@@ -146,40 +143,38 @@ class ActivateInviteCodeView(GenericAPIView):
     # Убираем или не указываем permission_classes
     serializer_class = InviteCodeSerializer
 
-    @swagger_auto_schema(operation_summary="Активация инвайт-кода для пользователя.",
+    @swagger_auto_schema(operation_summary="Активация инвайт-кода.",
                          request_body=InviteCodeSerializer)
     def post(self, request, *args, **kwargs):
-        """Активация инвайт-кода для пользователя."""
-
-        # Получаем инвайт-код из запроса
-        invite_code = request.data.get('invite_code')
-
+        """Активация инвайт-кода."""
         # Проверка на существование инвайт-кода
-        if not invite_code:
-            return Response({"message": "Инвайт-код не может быть пустым."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            # Проверяем, существует ли пользователь с этим инвайт-кодом
-            inviter = User.objects.get(invite_code=invite_code)
-        except User.DoesNotExist:
-            return Response({"message": "Неверный инвайт-код."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        # Если пользователь найден, но не авторизован, то создаем нового пользователя
-        user = request.user if request.user.is_authenticated else None
-
-        if user:
-            # Если пользователь авторизован, активируем инвайт-код для него
-            if user.activated_invite_code:
-                return Response({"message": "Вы уже активировали инвайт-код."},
-                                status=status.HTTP_400_BAD_REQUEST)
-
-            user.activate_invite_code(invite_code)
-            return Response(
-                {"message": f"Инвайт-код {invite_code} успешно активирован!"},
-                status=status.HTTP_200_OK)
-
-        return Response({
-                            "message": "Пользователь не авторизован. Но вы можете создать нового пользователя."},
+        if request.data.get('activated_invite_code'):
+            # Получаем инвайт-код из запроса
+            activated_invite_code = request.data.get('activated_invite_code')
+            print("activated_invite_code - ", activated_invite_code)
+            try:
+                # Проверяем, существует ли пользователь с этим инвайт-кодом
+                inviter = User.objects.get(invite_code=activated_invite_code)
+                # Если пользователь с таким инвайт-кодом найден
+                if inviter:
+                    invitee = User.objects.get(phone_number=request.data.get('phone_number'))
+                    # Проверка на уже активированный ранее инвайт код
+                    if not invitee.activated_invite_code:
+                        invitee.activated_invite_code = activated_invite_code
+                        invitee.save()
+                    else:
+                        return Response(
+                            {
+                                "message": f"Был ранее активирован инвайт-код {invitee.activated_invite_code}"},
+                            status=status.HTTP_409_CONFLICT)
+                    return Response(
+                        {"message": f"Инвайт-код {activated_invite_code} успешно активирован!"},
                         status=status.HTTP_200_OK)
+                else:
+                    return Response({"message": "Неверный инвайт-код@!."})
+            except User.DoesNotExist:
+                return Response({"message": "Нет пользователя с таким инвайт-кодом."},
+                                status=status.HTTP_400_BAD_REQUEST)
+        else:
+            return Response({"message": "Инвайт-код уже зарегистрирован."},
+                            status=status.HTTP_400_BAD_REQUEST)
