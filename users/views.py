@@ -219,5 +219,5 @@ class ActivateInviteCodeView(GenericAPIView):
                                 f"успешно активирован!"},
                     status=status.HTTP_200_OK)
             else:
-                return Response({"message": f"Был ранее активирован инвайт-код "},
+                return Response({"message": f"Инвайт-код ранее активирован"},
                                 status=status.HTTP_400_BAD_REQUEST)
