@@ -84,7 +84,7 @@ class VerificationCodeView(GenericAPIView):
     Эндпоинт для ввода кода верификации, который был отправлен на номер телефона.
     Если код правильный, то создается или обновляется пользователь.
     """
-    # serializer_class = VerificationCodeSerializer
+    serializer_class = VerificationCodeSerializer
 
     @swagger_auto_schema(operation_summary="Верификация номера телефона")
     def post(self, request, *args, **kwargs):
@@ -199,33 +199,31 @@ class ActivateInviteCodeView(GenericAPIView):
         if request.data.get('activated_invite_code'):
             # Получаем инвайт-код из запроса
             activated_invite_code = request.data.get('activated_invite_code')
+            # Получаем пользователя (не авторизированного) добавляющего инвайт
+            user = User.objects.get(phone_number=request.data.get('phone_number'))
+
             try:
                 # Проверяем, существует ли пользователь с этим инвайт-кодом
                 inviter = User.objects.get(invite_code=activated_invite_code)
-                # Если пользователь с таким инвайт-кодом найден
-                if inviter:
-                    invitee = User.objects.get(phone_number=request.data.get('phone_number'))
-                    # Проверка на уже активированный ранее инвайт код
-                    if not invitee.activated_invite_code:
-                        if invitee.activated_invite_code != inviter.activated_invite_code:
-                            invitee.activated_invite_code = activated_invite_code
-                            invitee.save()
-                    else:
-                        return Response(
-                            {
-                                "message": f"Был ранее активирован инвайт-код "
-                                           f"{invitee.activated_invite_code}"},
-                            status=status.HTTP_409_CONFLICT)
-                    return Response(
-                        {"message": f"Инвайт-код {activated_invite_code} "
-                                    f"успешно активирован!"},
-                        status=status.HTTP_200_OK)
-                else:
-                    return Response({"message": "Неверный инвайт-код."})
             except User.DoesNotExist:
-                return Response({"message": "Нет другого пользователя "
+                return Response({"message": "Нет пользователя "
                                             "с таким инвайт-кодом."},
                                 status=status.HTTP_400_BAD_REQUEST)
-        else:
-            return Response({"message": "Инвайт-код уже зарегистрирован."},
-                            status=status.HTTP_400_BAD_REQUEST)
+
+            # Если инвайн не активировался ранее
+            if user.activated_invite_code is None:
+                # Проверка на добавление своего же инвайт-кода
+                if user.phone_number == inviter.phone_number:
+                    return Response({"message": f"Нельзя активировать свой же инвайт."},
+                                    status=status.HTTP_409_CONFLICT)
+                else:
+                    user.activated_invite_code=request.data.get('activated_invite_code')
+                    print("xxxxx", user.activated_invite_code)
+                    user.save()
+                    return Response(
+                        {"message": f"Инвайт-код {request.data.get('activated_invite_code')} "
+                                    f"успешно активирован!"},
+                        status=status.HTTP_200_OK)
+            else:
+                return Response({"message": f"Был ранее активирован инвайт-код "},
+                                status=status.HTTP_409_CONFLICT)
