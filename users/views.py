@@ -213,17 +213,11 @@ class ActivateInviteCodeView(GenericAPIView):
             # Если инвайн не активировался ранее
             if user.activated_invite_code is None:
                 # Проверка на добавление своего же инвайт-кода
-                if user.phone_number == inviter.phone_number:
-                    return Response({"message": f"Нельзя активировать свой же инвайт."},
-                                    status=status.HTTP_409_CONFLICT)
-                else:
-                    user.activated_invite_code=request.data.get('activated_invite_code')
-                    print("xxxxx", user.activated_invite_code)
-                    user.save()
-                    return Response(
-                        {"message": f"Инвайт-код {request.data.get('activated_invite_code')} "
-                                    f"успешно активирован!"},
-                        status=status.HTTP_200_OK)
+                user.activate_invite_code(request.data.get('activated_invite_code'))
+                return Response(
+                    {"message": f"Инвайт-код {request.data.get('activated_invite_code')} "
+                                f"успешно активирован!"},
+                    status=status.HTTP_200_OK)
             else:
                 return Response({"message": f"Был ранее активирован инвайт-код "},
-                                status=status.HTTP_409_CONFLICT)
+                                status=status.HTTP_400_BAD_REQUEST)
