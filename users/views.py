@@ -6,11 +6,18 @@ from rest_framework import status
 from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 
+from django.urls import reverse_lazy
+from django.http import HttpResponse
+from django.shortcuts import render, redirect
+from django.views.generic import TemplateView, FormView, DetailView
+
+from users.forms import PhoneNumberForm, VerificationCodeForm
 from .models import User
 from .serializers import PhoneNumberVerificationSerializer, VerificationCodeSerializer, \
     UserProfileSerializer, InviteCodeSerializer
 
 
+# region API
 class PhoneNumberView(GenericAPIView):
     """
     Эндпоинт для ввода номера телефона.
@@ -166,9 +173,11 @@ class UserProfileView(GenericAPIView):
         username = kwargs.get('username')  # Извлекаем username из URL-параметра
 
         try:
-            user = User.objects.get(username=username)  # Находим пользователя по username
+            user = User.objects.get(
+                username=username)  # Находим пользователя по username
         except User.DoesNotExist:
-            return Response({"message": "Пользователь не найден"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"message": "Пользователь не найден"},
+                            status=status.HTTP_404_NOT_FOUND)
 
         # Сериализуем данные пользователя
         serializer = self.get_serializer(user)
@@ -215,9 +224,66 @@ class ActivateInviteCodeView(GenericAPIView):
                 # Проверка на добавление своего же инвайт-кода
                 user.activate_invite_code(request.data.get('activated_invite_code'))
                 return Response(
-                    {"message": f"Инвайт-код {request.data.get('activated_invite_code')} "
-                                f"успешно активирован!"},
+                    {
+                        "message": f"Инвайт-код {request.data.get('activated_invite_code')} "
+                                   f"успешно активирован!"},
                     status=status.HTTP_200_OK)
             else:
                 return Response({"message": f"Инвайт-код ранее активирован"},
                                 status=status.HTTP_400_BAD_REQUEST)
+
+
+# endregion API
+
+# region Templates
+
+
+class HomePageView(FormView):
+    template_name = 'users/index.html'
+    form_class = PhoneNumberForm
+    success_url = reverse_lazy('verify')
+
+    def form_valid(self, form):
+        phone_number = form.cleaned_data['phone_number']
+        try:
+            user = User.objects.get(phone_number=phone_number)
+            # Перенаправляем на профиль пользователя
+            return redirect('profile', username=user.username)
+        except User.DoesNotExist:
+            # Если пользователя с таким номером нет, перенаправляем на страницу ввода кода
+            return redirect('verify', phone_number=phone_number)
+
+
+class VerifyPhoneNumberView(FormView):
+    template_name = 'users/verify.html'
+    form_class = VerificationCodeForm
+
+    def dispatch(self, request, *args, **kwargs):
+        # Проверяем, что передан номер телефона
+        self.phone_number = self.kwargs.get('phone_number')
+        return super().dispatch(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        verification_code = form.cleaned_data['verification_code']
+        try:
+            user = User.objects.get(phone_number=self.phone_number)
+            if user.verification_code == verification_code:
+                # Код верен, сохраняем информацию о активированном инвайт-коде
+                user.activated_invite_code = user.invite_code  # Пример активации
+                user.save()
+                return redirect('profile', username=user.username)
+            else:
+                return HttpResponse("Неверный код верификации", status=400)
+        except User.DoesNotExist:
+            return HttpResponse("Пользователь не найден", status=404)
+
+
+class UserProfileView(DetailView):
+    model = User
+    template_name = 'users/profile.html'
+    context_object_name = 'user'
+
+    def get_object(self, queryset=None):
+        return User.objects.get(username=self.kwargs['username'])
+
+# endregion Templates

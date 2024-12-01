@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Профиль пользователя</title>
+</head>
+<body>
+    <h1>Профиль пользователя {{ user.username }}</h1>
+    <p>Телефон: {{ user.phone_number }}</p>
+    <p>Инвайт-код: {{ user.invite_code }}</p>
+    <p>Активированный инвайт-код: {{ user.activated_invite_code }}</p>
+</body>
+</html>
