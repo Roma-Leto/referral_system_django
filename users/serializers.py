@@ -5,7 +5,6 @@ from .models import User
 
 class PhoneNumberVerificationSerializer(serializers.Serializer):
     phone_number = serializers.CharField(max_length=15)
-    verification_code = serializers.CharField(max_length=4)
 
     def validate_phone_number(self, value):
         """Валидация номера телефона"""

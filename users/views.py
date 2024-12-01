@@ -16,12 +16,20 @@ class PhoneNumberView(GenericAPIView):
     Эндпоинт для ввода номера телефона.
     После успешной валидации номера телефона генерируется 4-значный код для верификации.
     """
-    serializer_class = PhoneNumberVerificationSerializer  # Используется сериализатор для проверки номера телефона.
+    serializer_class = PhoneNumberVerificationSerializer
 
     @swagger_auto_schema(operation_summary="Авторизация по номеру телефона")
     def post(self, request, *args, **kwargs):
         """
-        Обрабатывает POST-запрос, проверяет номер телефона и отправляет код верификации.
+        Обрабатывает POST-запрос, проверяет номер телефона на дублирование в базе данных,
+        а так же активацию через код ранее, отправляет 4-значный код верификации.
+
+        Параметры:
+
+          "phone_number" числовое поле json: "номер телефона, 11-15 цифр",
+
+        Возвращает сообщение о результате операции и отправляет код верификации с
+        имитацией задержки в 1-2 секунды на введённый номер.
         """
         serializer = PhoneNumberVerificationSerializer(data=request.data)
 
@@ -34,13 +42,15 @@ class PhoneNumberView(GenericAPIView):
                 phone_number=phone_number).first()  # Используем номер телефона как username
             if user:
                 if user.is_active:
-                    # Если пользователь уже верифицирован (is_active=1), возвращаем сообщение и перенаправляем на профиль.
+                    # Если пользователь уже верифицирован (is_active=1),
+                    # возвращаем сообщение и перенаправляем на профиль.
                     return Response({
                         "message": "Пользователь верифицирован",
-                        "profile_url": f"/profile/{user.id}/"  # Пример ссылки на профиль
+                        "profile_url": f"/profile/{user.id}/"
                     }, status=status.HTTP_200_OK)
                 else:
-                    # Если пользователь существует, но не активирован (is_active=0), отправляем новый код верификации.
+                    # Если пользователь существует, но не активирован (is_active=0),
+                    # отправляем новый код верификации.
                     verification_code = user.generate_and_send_verification_code()
 
                     # Имитируем задержку на сервере для отправки кода верификации.
@@ -74,12 +84,21 @@ class VerificationCodeView(GenericAPIView):
     Эндпоинт для ввода кода верификации, который был отправлен на номер телефона.
     Если код правильный, то создается или обновляется пользователь.
     """
-    serializer_class = VerificationCodeSerializer  # Сериализатор для проверки кода верификации.
+    serializer_class = VerificationCodeSerializer
 
     @swagger_auto_schema(operation_summary="Верификация номера телефона")
     def post(self, request, *args, **kwargs):
         """
-        Обрабатывает POST-запрос, проверяет номер телефона и отправляет код верификации.
+        Обрабатывает POST-запрос, проверяет номер телефона на дублирование в базе данных
+        и отправляет код верификации в случае когда информация о пользователе
+        в базе данных отсутствует.
+
+        Параметры:
+
+          "phone_number" числовое поле json: "номер телефона, 11-15 цифр",
+          "verification_code" числовое поле json: "4 цифры"
+
+        Возвращает сообщение о результате операции.
         """
         # Создаем экземпляр сериализатора с данными из запроса.
         serializer = PhoneNumberVerificationSerializer(data=request.data)
@@ -123,9 +142,26 @@ class UserProfileView(GenericAPIView):
     # permission_classes = [IsAuthenticated]
     serializer_class = UserProfileSerializer
 
+    @swagger_auto_schema(operation_summary="Просмотр профиля пользователя.")
     def get(self, request, *args, **kwargs):
         """
-        Получить профиль пользователя по имени пользователя (username).
+        Получить информацию о профиле пользователя по номеру телефона.
+
+        Параметры:
+          Поле "username" строковое: 11-15 цифр
+
+        Возвращает данные пользователя: номер телефона (он же имя пользователя),
+        инвайт-код профиля, инвайт-код реферала (null если такого кода нет),
+        номера телефонов пользователей которые воспользовались инвайт-кодом профиля.
+
+        Пример ответа на запрос:
+
+        {
+          "phone_number": "00009996633",
+          "invite_code": "0aVNRO",
+          "activated_invite_code": null,
+          "invited_users": ["8989989989"]
+        }
         """
         username = kwargs.get('username')  # Извлекаем username из URL-параметра
 
@@ -140,13 +176,25 @@ class UserProfileView(GenericAPIView):
 
 
 class ActivateInviteCodeView(GenericAPIView):
-    # Убираем или не указываем permission_classes
     serializer_class = InviteCodeSerializer
 
     @swagger_auto_schema(operation_summary="Активация инвайт-кода.",
                          request_body=InviteCodeSerializer)
     def post(self, request, *args, **kwargs):
-        """Активация инвайт-кода."""
+        """
+        Активация инвайт-кода.
+        Предусмотренны случаи ранее активированного инвайт-кода, несуществующего кода,
+        успешной активации. Реализовано ьез необходимости предварительной авторизации.
+
+        Параметры:
+
+          "phone_number" числовое поле json: "номер телефона, 11-15 цифр",
+          "activated_invite_code" строка json: "любые шесть символов"
+
+          Поле "username" и поле "phone_number" должны содержать один номер телефона.
+
+        Возвращает сообщение о результате операции.
+        """
         # Проверка на существование инвайт-кода
         if request.data.get('activated_invite_code'):
             # Получаем инвайт-код из запроса
@@ -171,7 +219,7 @@ class ActivateInviteCodeView(GenericAPIView):
                         {"message": f"Инвайт-код {activated_invite_code} успешно активирован!"},
                         status=status.HTTP_200_OK)
                 else:
-                    return Response({"message": "Неверный инвайт-код@!."})
+                    return Response({"message": "Неверный инвайт-код."})
             except User.DoesNotExist:
                 return Response({"message": "Нет пользователя с таким инвайт-кодом."},
                                 status=status.HTTP_400_BAD_REQUEST)
