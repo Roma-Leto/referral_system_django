@@ -57,7 +57,7 @@ class User(AbstractUser):
 
     def activate_invite_code(self, code):
         """Активация инвайт-кода"""
-        if code == self.invite_code:
+        if code != self.invite_code:
             self.activated_invite_code = code
             self.save()
             return True

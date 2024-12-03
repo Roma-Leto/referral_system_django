@@ -9,6 +9,15 @@
     <h1>Профиль пользователя {{ user.username }}</h1>
     <p>Телефон: {{ user.phone_number }}</p>
     <p>Инвайт-код: {{ user.invite_code }}</p>
-    <p>Активированный инвайт-код: {{ user.activated_invite_code }}</p>
+    {% if user.activate_invite_code is None %}
+        <p>Инвайт-код не активирован</p>
+        <form method="POST">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button type="submit">Активировать инвайт-код</button>
+        </form>
+    {% else %}
+        <p>Активированный инвайт-код: {{ user.activated_invite_code }}</p>
+    {% endif %}
 </body>
 </html>

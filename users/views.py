@@ -1,6 +1,7 @@
 import random
 import time
 
+from django.contrib import messages
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework import status
 from rest_framework.generics import GenericAPIView
@@ -10,7 +11,7 @@ from django.http import HttpResponse
 from django.shortcuts import render, redirect
 from django.views.generic import FormView, DetailView
 
-from users.forms import PhoneNumberForm, VerificationCodeForm
+from users.forms import PhoneNumberForm, VerificationCodeForm, ActiveInviteCodeView
 from .models import User
 from .serializers import PhoneNumberVerificationSerializer, VerificationCodeSerializer, \
     UserProfileSerializer, InviteCodeSerializer
@@ -260,17 +261,12 @@ class VerifyPhoneNumberView(FormView):
     template_name = 'users/verify.html'
     form_class = VerificationCodeForm
 
-    # def dispatch(self, request, *args, **kwargs):
-    #     # Проверяем, что передан номер телефона
-    #     self.phone_number = self.kwargs.get('phone_number')
-    #     return super().dispatch(request, *args, **kwargs)
-
     def form_valid(self, form):
         verification_code = form.cleaned_data['verification_code']
         try:
             user = User.objects.get(verification_code=verification_code)
             if user.verification_code == verification_code:
-                # Код верен, сохраняем информацию о активированном инвайт-коде
+                # Код верен, генерируем инвайт-код, меняем статус активации пользователя.
                 user.generate_invite_code()
                 user.is_active = True
                 user.save()
@@ -281,10 +277,22 @@ class VerifyPhoneNumberView(FormView):
             return HttpResponse("Пользователь не найден", status=404)
 
 
-class UserProfileView(DetailView):
+class UserProfileView(DetailView, FormView):
     model = User
     template_name = 'users/profile.html'
     context_object_name = 'user'
+    form_class = ActiveInviteCodeView
+
+    def form_valid(self, form):
+        activated_invite_code = form.cleaned_data['activated_invite_code']
+        is_exists = User.objects.filter(invite_code=activated_invite_code).exists()
+
+        if is_exists:
+            user = User.objects.get(username=self.kwargs['username'])
+            user.activate_invite_code(activated_invite_code)
+            return redirect('profile', username=self.kwargs['username'])
+        else:
+            return redirect('profile', username=self.kwargs['username'])
 
     def get_object(self, queryset=None):
         return User.objects.get(username=self.kwargs['username'])
