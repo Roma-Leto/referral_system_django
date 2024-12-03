@@ -6,10 +6,9 @@ from rest_framework import status
 from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 
-from django.urls import reverse_lazy
 from django.http import HttpResponse
 from django.shortcuts import render, redirect
-from django.views.generic import TemplateView, FormView, DetailView
+from django.views.generic import FormView, DetailView
 
 from users.forms import PhoneNumberForm, VerificationCodeForm
 from .models import User
@@ -261,18 +260,19 @@ class VerifyPhoneNumberView(FormView):
     template_name = 'users/verify.html'
     form_class = VerificationCodeForm
 
-    def dispatch(self, request, *args, **kwargs):
-        # Проверяем, что передан номер телефона
-        self.phone_number = self.kwargs.get('phone_number')
-        return super().dispatch(request, *args, **kwargs)
+    # def dispatch(self, request, *args, **kwargs):
+    #     # Проверяем, что передан номер телефона
+    #     self.phone_number = self.kwargs.get('phone_number')
+    #     return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
         verification_code = form.cleaned_data['verification_code']
         try:
-            user = User.objects.get(phone_number=self.phone_number)
+            user = User.objects.get(verification_code=verification_code)
             if user.verification_code == verification_code:
                 # Код верен, сохраняем информацию о активированном инвайт-коде
-                user.activated_invite_code = user.invite_code  # Пример активации
+                user.generate_invite_code()
+                user.is_active = True
                 user.save()
                 return redirect('profile', username=user.username)
             else:
