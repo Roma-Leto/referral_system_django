@@ -241,14 +241,17 @@ class ActivateInviteCodeView(GenericAPIView):
 class HomePageView(FormView):
     template_name = 'users/index.html'
     form_class = PhoneNumberForm
-    success_url = reverse_lazy('verify')
 
     def form_valid(self, form):
         phone_number = form.cleaned_data['phone_number']
         try:
             user = User.objects.get(phone_number=phone_number)
-            # Перенаправляем на профиль пользователя
-            return redirect('profile', username=user.username)
+            # Проверка верификации
+            if user.is_active:
+                # Перенаправляем на профиль пользователя
+                return redirect('profile', username=user.username)
+            else:
+                return redirect('verify', phone_number=phone_number)
         except User.DoesNotExist:
             # Если пользователя с таким номером нет, перенаправляем на страницу ввода кода
             return redirect('verify', phone_number=phone_number)
